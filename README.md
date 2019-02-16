@@ -1,5 +1,7 @@
 # CertBot DANE hook
 
+[![Build Status](https://travis-ci.com/mys721tx/cdh.svg?branch=master)](https://travis-ci.com/mys721tx/cdh)
+
 ## Description
 
 **CertBot DANE hook** is a post deployment hook for
