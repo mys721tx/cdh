@@ -1,7 +1,24 @@
+// CDH: CertBot DANE hook
+// Copyright (C) 2019  Yishen Miao
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 package main
 
 import (
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"flag"
 	"fmt"
@@ -23,7 +40,7 @@ type config struct {
 }
 
 var (
-	keyPath, project, zone string
+	keyPath, zone string
 )
 
 func readCert(f string) (map[string]string, error) {
@@ -59,10 +76,24 @@ func readCert(f string) (map[string]string, error) {
 	return m, nil
 }
 
-func newDNSClient(f string) (*gcdns.Service, error) {
+// newDNSClient reads a JSON key file and return a DNS client, the project ID,
+// and any error occurred.
+func newDNSClient(f string) (*gcdns.Service, string, error) {
+	var projectID string
+	var err error
+
 	data, err := ioutil.ReadFile(filepath.Clean(f))
 	if err != nil {
-		return nil, err
+		return nil, projectID, err
+	}
+
+	var info map[string]string
+	err = json.Unmarshal(data, &info)
+	if err != nil {
+		return nil, projectID, err
+	}
+	if p, ok := info["project_id"]; ok {
+		projectID = p
 	}
 
 	conf, err := google.JWTConfigFromJSON(
@@ -70,10 +101,15 @@ func newDNSClient(f string) (*gcdns.Service, error) {
 		gcdns.NdevClouddnsReadwriteScope,
 	)
 	if err != nil {
-		return nil, err
+		return nil, projectID, err
 	}
 
-	return gcdns.New(conf.Client(oauth2.NoContext))
+	dnsSer, err := gcdns.New(conf.Client(oauth2.NoContext))
+	if err != nil {
+		return nil, projectID, err
+	}
+
+	return dnsSer, projectID, nil
 }
 
 func newChange(rR []*gcdns.ResourceRecordSet, d map[string]string) *gcdns.Change {
@@ -108,12 +144,14 @@ func newChange(rR []*gcdns.ResourceRecordSet, d map[string]string) *gcdns.Change
 
 func main() {
 	flag.StringVar(&keyPath, "k", "", "path to the Google Cloud key file")
-	flag.StringVar(&project, "p", "", "name of the Google Cloud project")
 	flag.StringVar(&zone, "z", "", "name of the DNS zone")
 	flag.Parse()
 
+	var err error
+
 	cfg := config{}
-	if err := env.Parse(&cfg); err != nil {
+	err = env.Parse(&cfg)
+	if err != nil {
 		fmt.Printf("%+v\n", err)
 	}
 
@@ -122,7 +160,7 @@ func main() {
 		fmt.Printf("%+v\n", err)
 	}
 
-	dnsService, err := newDNSClient(keyPath)
+	dnsService, project, err := newDNSClient(keyPath)
 	if err != nil {
 		log.Fatal(err)
 	}

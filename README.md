@@ -6,6 +6,16 @@
 [certbot](https://github.com/certbot/certbot) to update DANE records from
 various DNS providers.
 
+Like certbot-dns-google, the following permissions are needed:
+
+* dns.changes.create
+* dns.changes.get
+* dns.managedZones.list
+* dns.resourceRecordSets.create
+* dns.resourceRecordSets.delete
+* dns.resourceRecordSets.list
+* dns.resourceRecordSets.update
+
 ## Author
 
 * [Yishen Miao](https://github.com/mys721tx)
