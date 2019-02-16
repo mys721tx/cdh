@@ -15,6 +15,20 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 /*
-Package cdh provides tools to update TLSA records after certbot renewal.
+Cdh takes the domain names and path of the live certificate from certbot and
+update related TLSA records on Google Cloud DNS.
+
+The domain names are passed via the environment variable RENEWED_DOMAINS. The
+path of the certificate is passed via RENEWED_LINEAGE.
+
+Currently Cdh only supports DANE certificate usage 3 (DANE-EE), selector 1 1
+(public key, SHA-256).
+
+Usage:
+	cdh [flags]
+
+The flags are:
+	-k string
+		path to the service account JSON key file
 */
-package cdh
+package main

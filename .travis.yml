@@ -4,18 +4,15 @@ os:
 - osx
 go:
 - '1.11'
+script:
+- make test
 before_deploy:
-- mkdir "cdh-${TRAVIS_OS_NAME}-${TRAVIS_TAG}"
-- go build cmd/cdh/cdh.go
-- cp cdh "cdh-${TRAVIS_OS_NAME}-${TRAVIS_TAG}"
-- cp LICENSE "cdh-${TRAVIS_OS_NAME}-${TRAVIS_TAG}"
-- cp README.md "cdh-${TRAVIS_OS_NAME}-${TRAVIS_TAG}"
-- zip -r "cdh-${TRAVIS_OS_NAME}-${TRAVIS_TAG}.zip" "cdh-${TRAVIS_OS_NAME}-${TRAVIS_TAG}"
+- make PACKAGE="cdh-${TRAVIS_TAG}-${TRAVIS_OS_NAME}" package
 deploy:
   provider: releases
   api_key:
     secure: t9KBsun86IDSpE/XShL7+zo0XMNMcr6xP7NQ/bdA5bRKtaVo+dFPiNTtVJN4ISjynepdUlD+qUCzZl736GOoX7Jntg0EE2z/ij6Ax5JXz17Mxt4w6lRSPAzRA4YTgGFAODwNy+cywkX68Ai5MeB6fMrUXGXKHOAmC2gRbUKazkZEtBluyrh7+h2jJdzEw95flE5HLgGIAuq61QiK1+CwCdx6tG2kF8jd6IiaWFrY95QNfd9SOuTeAdJo5xQ+rsxbPohdCqkX/hhGXfgtil/6aKj8kMMaqCzxv8zwOSBopfXbAwf1KXy7ZUkUsePnET33RXBuAkChBJI/Bu8ymDtDR5XGttWbpOJojGlOAKNiVMjM6/Tb3WOzyiSVPkCLOJ8t2UjTf5zulkRQb73m5dYj8Vl1IBrPlV3tuZSJ6O8E0jHkXrr6ABhMtbLyvK2d37QALN5ObDFTJKwsIkV0aANgdYnfPAnCW+lK7hAP3Iee8DWKBzyCz4bKJ7Pd8cVO+7Dc2v+39Usokomd5ECPjSNxHSXDJldlL6WXehcN9jDhS5YNeVd/Lgqp35FNYkmIxBuPMFf8J8moas7gZuhgsyODPbGLQV2icOpshnW0SgY9QeAbk9g7BLEM3s/YFVwwIQ3FjSBLD3aAUwP4ZkB+yEhz8SH84sxucielR555cyltbK4=
-  file: "cdh-${TRAVIS_OS_NAME}-${TRAVIS_TAG}.zip"
+  file: "cdh-${TRAVIS_TAG}-${TRAVIS_OS_NAME}.tar.gz"
   skip_cleanup: true
   on:
     repo: mys721tx/cdh

@@ -46,7 +46,7 @@ var (
 func readCert(f string) (map[string]string, error) {
 	m := make(map[string]string)
 
-	data, err := ioutil.ReadFile(filepath.Clean(f))
+	data, err := ioutil.ReadFile(filepath.Join(filepath.Clean(f), "cert.pem"))
 	if err != nil {
 		return nil, err
 	}
