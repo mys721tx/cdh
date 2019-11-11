@@ -53,18 +53,12 @@ func NewTLSA() *tlsa {
 }
 
 func (t *tlsa) ReadCert(c *x509.Certificate) error {
-	if c.IsCA {
-		if ta, err := dns.CertificateToDANE(1, 1, c); err != nil {
-			return err
-		} else {
-			t.TrustAnchor = ta
-			return nil
-		}
-	}
-	if ee, err := dns.CertificateToDANE(1, 1, c); err != nil {
+	if dane, err := dns.CertificateToDANE(1, 1, c); err != nil {
 		return err
+	} else if c.IsCA {
+		t.TrustAnchor = dane
 	} else {
-		t.EndEntity = ee
+		t.EndEntity = dane
 		for _, d := range c.DNSNames {
 			// Adds dot for DNS
 			if !strings.HasSuffix(d, ".") {
@@ -73,8 +67,23 @@ func (t *tlsa) ReadCert(c *x509.Certificate) error {
 				t.DNSNames[d] = true
 			}
 		}
-		return nil
 	}
+	return nil
+}
+
+func (t tlsa) MakeRRData() []string {
+	r := []string{
+		fmt.Sprintf(
+			"3 1 1 %s",
+			t.EndEntity,
+		),
+		fmt.Sprintf(
+			"2 1 1 %s",
+			t.TrustAnchor,
+		),
+	}
+
+	return r
 }
 
 var (
@@ -86,17 +95,17 @@ func readCert(f string) (*tlsa, error) {
 
 	data, err := ioutil.ReadFile(filepath.Join(filepath.Clean(f), "fullchain.pem"))
 	if err != nil {
-		return t, err
+		return nil, err
 	}
 
 	for b, r := pem.Decode(data); b != nil; b, r = pem.Decode(r) {
 		cert, err := x509.ParseCertificate(b.Bytes)
 		if err != nil {
-			return t, err
+			return nil, err
 		}
 		err = t.ReadCert(cert)
 		if err != nil {
-			return t, err
+			return nil, err
 		}
 	}
 
@@ -150,20 +159,11 @@ func newChange(rR []*gcdns.ResourceRecordSet, t *tlsa) *gcdns.Change {
 				cset.Additions = append(
 					cset.Additions,
 					&gcdns.ResourceRecordSet{
-						Kind: r.Kind,
-						Name: r.Name,
-						Ttl:  r.Ttl,
-						Type: r.Type,
-						Rrdatas: []string{
-							fmt.Sprintf(
-								"3 1 1 %s",
-								t.EndEntity,
-							),
-							fmt.Sprintf(
-								"2 1 1 %s",
-								t.TrustAnchor,
-							),
-						},
+						Kind:    r.Kind,
+						Name:    r.Name,
+						Ttl:     r.Ttl,
+						Type:    r.Type,
+						Rrdatas: t.MakeRRData(),
 					},
 				)
 			}
