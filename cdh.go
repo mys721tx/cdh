@@ -39,41 +39,68 @@ type config struct {
 	Cert    string   `env:"RENEWED_LINEAGE"`
 }
 
+type tlsa struct {
+	TrustAnchor string
+	EndEntity   string
+	DNSNames    map[string]bool
+}
+
+// NewTLSA creates a new instance of tlsa struct.
+func NewTLSA() *tlsa {
+	var t tlsa
+	t.DNSNames = make(map[string]bool)
+	return &t
+}
+
+func (t *tlsa) ReadCert(c *x509.Certificate) error {
+	if c.IsCA {
+		if ta, err := dns.CertificateToDANE(1, 1, c); err != nil {
+			return err
+		} else {
+			t.TrustAnchor = ta
+			return nil
+		}
+	}
+	if ee, err := dns.CertificateToDANE(1, 1, c); err != nil {
+		return err
+	} else {
+		t.EndEntity = ee
+		for _, d := range c.DNSNames {
+			// Adds dot for DNS
+			if !strings.HasSuffix(d, ".") {
+				t.DNSNames[d+"."] = true
+			} else {
+				t.DNSNames[d] = true
+			}
+		}
+		return nil
+	}
+}
+
 var (
 	keyPath, zone string
 )
 
-func readCert(f string) (map[string]string, error) {
-	m := make(map[string]string)
+func readCert(f string) (*tlsa, error) {
+	t := NewTLSA()
 
-	data, err := ioutil.ReadFile(filepath.Join(filepath.Clean(f), "cert.pem"))
+	data, err := ioutil.ReadFile(filepath.Join(filepath.Clean(f), "fullchain.pem"))
 	if err != nil {
-		return nil, err
+		return t, err
 	}
 
 	for b, r := pem.Decode(data); b != nil; b, r = pem.Decode(r) {
 		cert, err := x509.ParseCertificate(b.Bytes)
 		if err != nil {
-			return m, err
+			return t, err
 		}
-
-		tlsa, err := dns.CertificateToDANE(1, 1, cert)
+		err = t.ReadCert(cert)
 		if err != nil {
-			return m, err
-		}
-
-		// Apparently intermediate CA does not have this field.
-		for _, d := range cert.DNSNames {
-			// Adds dot for DNS
-			if !strings.HasSuffix(d, ".") {
-				m[d+"."] = tlsa
-			} else {
-				m[d] = tlsa
-			}
+			return t, err
 		}
 	}
 
-	return m, nil
+	return t, nil
 }
 
 // newDNSClient reads a JSON key file and return a DNS client, the project ID,
@@ -112,13 +139,13 @@ func newDNSClient(f string) (*gcdns.Service, string, error) {
 	return dnsSer, projectID, nil
 }
 
-func newChange(rR []*gcdns.ResourceRecordSet, d map[string]string) *gcdns.Change {
+func newChange(rR []*gcdns.ResourceRecordSet, t *tlsa) *gcdns.Change {
 	cset := gcdns.Change{}
 
 	for _, r := range rR {
 		if r.Type == "TLSA" {
 			s := strings.SplitN(r.Name, ".", 3)
-			if dane, ok := d[s[2]]; ok {
+			if _, ok := t.DNSNames[s[2]]; ok {
 				cset.Deletions = append(cset.Deletions, r)
 				cset.Additions = append(
 					cset.Additions,
@@ -130,7 +157,11 @@ func newChange(rR []*gcdns.ResourceRecordSet, d map[string]string) *gcdns.Change
 						Rrdatas: []string{
 							fmt.Sprintf(
 								"3 1 1 %s",
-								dane,
+								t.EndEntity,
+							),
+							fmt.Sprintf(
+								"2 1 1 %s",
+								t.TrustAnchor,
 							),
 						},
 					},
