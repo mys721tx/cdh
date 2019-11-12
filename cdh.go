@@ -17,6 +17,7 @@
 package main
 
 import (
+	"context"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
@@ -29,9 +30,8 @@ import (
 
 	"github.com/caarlos0/env"
 	"github.com/miekg/dns"
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/google"
 	gcdns "google.golang.org/api/dns/v1"
+	"google.golang.org/api/option"
 )
 
 type config struct {
@@ -132,15 +132,11 @@ func newDNSClient(f string) (*gcdns.Service, string, error) {
 		projectID = p
 	}
 
-	conf, err := google.JWTConfigFromJSON(
-		data,
-		gcdns.NdevClouddnsReadwriteScope,
+	dnsSer, err := gcdns.NewService(
+		context.Background(),
+		option.WithCredentialsJSON(data),
+		option.WithScopes(gcdns.NdevClouddnsReadwriteScope),
 	)
-	if err != nil {
-		return nil, projectID, err
-	}
-
-	dnsSer, err := gcdns.New(conf.Client(oauth2.NoContext))
 	if err != nil {
 		return nil, projectID, err
 	}
