@@ -5,7 +5,7 @@ require (
 	github.com/caarlos0/env v3.5.0+incompatible
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/golang/groupcache v0.0.0-20191027212112-611e8accdfc9 // indirect
-	github.com/miekg/dns v1.1.22
+	github.com/miekg/dns v1.1.26
 	go.opencensus.io v0.22.2 // indirect
 	golang.org/x/crypto v0.0.0-20191111213947-16651526fdb4 // indirect
 	golang.org/x/net v0.0.0-20191109021931-daa7c04131f5 // indirect
