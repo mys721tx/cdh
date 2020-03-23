@@ -3,7 +3,7 @@ os:
 - linux
 - osx
 go:
-- '1.13'
+- '1.14'
 script:
 - make test
 before_deploy:
