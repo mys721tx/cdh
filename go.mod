@@ -5,7 +5,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/miekg/dns v1.1.29
 	golang.org/x/crypto v0.0.0-20191227163750-53104e6ec876 // indirect
-	google.golang.org/api v0.28.0
+	google.golang.org/api v0.29.0
 )
 
 go 1.13
