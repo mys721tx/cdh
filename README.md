@@ -1,6 +1,6 @@
 # CertBot DANE hook
 
-[![Build Status](https://travis-ci.com/mys721tx/cdh.svg?branch=master)](https://travis-ci.com/mys721tx/cdh)
+[![Build status](https://github.com/mys721tx/cdh/actions/workflows/go_test.yml/badge.svg)](https://github.com/mys721tx/cdh/actions/workflows/go_test.yml)
 [![GoDoc](https://godoc.org/github.com/mys721tx/cdh?status.svg)](https://godoc.org/github.com/mys721tx/cdh)
 
 ## Description
