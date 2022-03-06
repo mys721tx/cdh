@@ -28,7 +28,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/caarlos0/env"
+	"github.com/caarlos0/env/v6"
 	"github.com/miekg/dns"
 	gcdns "google.golang.org/api/dns/v1"
 	"google.golang.org/api/option"
