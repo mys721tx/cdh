@@ -3,7 +3,7 @@ module github.com/mys721tx/cdh
 require (
 	github.com/caarlos0/env/v6 v6.10.1
 	github.com/miekg/dns v1.1.50
-	google.golang.org/api v0.96.0
+	google.golang.org/api v0.98.0
 )
 
 require (
