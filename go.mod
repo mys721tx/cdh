@@ -3,7 +3,7 @@ module github.com/mys721tx/cdh
 require (
 	github.com/caarlos0/env/v7 v7.0.0
 	github.com/miekg/dns v1.1.50
-	google.golang.org/api v0.110.0
+	google.golang.org/api v0.111.0
 )
 
 require (
@@ -22,7 +22,7 @@ require (
 	golang.org/x/text v0.7.0 // indirect
 	golang.org/x/tools v0.6.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/genproto v0.0.0-20230216225411-c8e22ba71e44 // indirect
+	google.golang.org/genproto v0.0.0-20230223222841-637eb2293923 // indirect
 	google.golang.org/grpc v1.53.0 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 )
