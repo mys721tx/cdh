@@ -31,7 +31,7 @@ github.com/googleapis/gax-go/v2
 github.com/googleapis/gax-go/v2/apierror
 github.com/googleapis/gax-go/v2/apierror/internal/proto
 github.com/googleapis/gax-go/v2/internal
-# github.com/miekg/dns v1.1.50
+# github.com/miekg/dns v1.1.51
 ## explicit; go 1.14
 github.com/miekg/dns
 # go.opencensus.io v0.24.0
