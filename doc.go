@@ -25,9 +25,11 @@ Currently Cdh only supports DANE certificate usage 3 (DANE-EE), selector 1 1
 (public key, SHA-256).
 
 Usage:
+
 	cdh [flags]
 
 The flags are:
+
 	-k string
 		path to the service account JSON key file
 */
