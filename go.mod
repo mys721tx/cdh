@@ -2,7 +2,7 @@ module github.com/mys721tx/cdh
 
 require (
 	github.com/caarlos0/env/v8 v8.0.0
-	github.com/miekg/dns v1.1.54
+	github.com/miekg/dns v1.1.55
 	google.golang.org/api v0.126.0
 )
 
