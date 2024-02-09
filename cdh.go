@@ -23,8 +23,8 @@ import (
 	"encoding/pem"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -93,7 +93,7 @@ var (
 func readCert(f string) (*tlsa, error) {
 	t := NewTLSA()
 
-	data, err := ioutil.ReadFile(filepath.Join(filepath.Clean(f), "fullchain.pem"))
+	data, err := os.ReadFile(filepath.Join(filepath.Clean(f), "fullchain.pem"))
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +118,7 @@ func newDNSClient(f string) (*gcdns.Service, string, error) {
 	var projectID string
 	var err error
 
-	data, err := ioutil.ReadFile(filepath.Clean(f))
+	data, err := os.ReadFile(filepath.Clean(f))
 	if err != nil {
 		return nil, projectID, err
 	}
