@@ -42,13 +42,13 @@ type config struct {
 type tlsa struct {
 	TrustAnchor string
 	EndEntity   string
-	DNSNames    map[string]bool
+	DNSNames    []string
 }
 
 // NewTLSA creates a new instance of tlsa struct.
 func NewTLSA() *tlsa {
 	var t tlsa
-	t.DNSNames = make(map[string]bool)
+	t.DNSNames = make([]string, 0)
 	return &t
 }
 
@@ -62,9 +62,9 @@ func (t *tlsa) ReadCert(c *x509.Certificate) error {
 		for _, d := range c.DNSNames {
 			// Adds dot for DNS
 			if !strings.HasSuffix(d, ".") {
-				t.DNSNames[d+"."] = true
+				t.DNSNames = append(t.DNSNames, d+".")
 			} else {
-				t.DNSNames[d] = true
+				t.DNSNames = append(t.DNSNames, d)
 			}
 		}
 	}
@@ -147,22 +147,42 @@ func newDNSClient(f string) (*gcdns.Service, string, error) {
 func newChange(rR []*gcdns.ResourceRecordSet, t *tlsa) *gcdns.Change {
 	cset := gcdns.Change{}
 
+	// Build a map of resource record sets
+	recordMap := make(map[string][]*gcdns.ResourceRecordSet)
 	for _, r := range rR {
 		if r.Type == "TLSA" {
-			s := strings.SplitN(r.Name, ".", 3)
-			if _, ok := t.DNSNames[s[2]]; ok {
+			domain := strings.SplitN(r.Name, ".", 3)[2] // Remove the TLSA prefix from the domain name
+			recordMap[domain] = append(recordMap[domain], r)
+		}
+	}
+
+	for _, dnsName := range t.DNSNames {
+		// Check if the DNS name exists in the map
+		if rList, ok := recordMap[dnsName]; ok {
+			for _, r := range rList {
+				// Append the original record to cset.Deletions
 				cset.Deletions = append(cset.Deletions, r)
-				cset.Additions = append(
-					cset.Additions,
-					&gcdns.ResourceRecordSet{
-						Kind:    r.Kind,
-						Name:    r.Name,
-						Ttl:     r.Ttl,
-						Type:    r.Type,
-						Rrdatas: t.MakeRRData(),
-					},
-				)
+
+				// Create a new resource record set with updated Rrdatas
+				newRecord := &gcdns.ResourceRecordSet{
+					Kind:    r.Kind,
+					Name:    r.Name,
+					Ttl:     r.Ttl,
+					Type:    r.Type,
+					Rrdatas: t.MakeRRData(),
+				}
+				cset.Additions = append(cset.Additions, newRecord)
 			}
+		} else {
+			// Create a new resource record set with default values
+			newRecord := &gcdns.ResourceRecordSet{
+				Kind:    "dns#resourceRecordSet",
+				Name:    "_443._tcp." + dnsName,
+				Ttl:     300,
+				Type:    "TLSA",
+				Rrdatas: t.MakeRRData(),
+			}
+			cset.Additions = append(cset.Additions, newRecord)
 		}
 	}
 
