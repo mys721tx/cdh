@@ -179,12 +179,12 @@ func main() {
 	cfg := config{}
 	err = env.Parse(&cfg)
 	if err != nil {
-		fmt.Printf("%+v\n", err)
+		log.Fatal(err)
 	}
 
 	domains, err := readCert(cfg.Cert)
 	if err != nil {
-		fmt.Printf("%+v\n", err)
+		log.Fatal(err)
 	}
 
 	dnsService, project, err := newDNSClient(keyPath)
