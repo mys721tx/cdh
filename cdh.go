@@ -1,5 +1,5 @@
 // CDH: CertBot DANE hook
-// Copyright (C) 2019  Yishen Miao
+// Copyright (C) 2019-2024  Yishen Miao
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
