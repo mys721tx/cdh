@@ -1,5 +1,7 @@
 module github.com/mys721tx/cdh
 
+go 1.23
+
 require (
 	github.com/miekg/dns v1.1.62
 	github.com/sethvargo/go-envconfig v1.1.0
@@ -35,5 +37,3 @@ require (
 	google.golang.org/grpc v1.69.2 // indirect
 	google.golang.org/protobuf v1.36.1 // indirect
 )
-
-go 1.23
