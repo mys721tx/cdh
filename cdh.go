@@ -28,14 +28,14 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/caarlos0/env/v11"
 	"github.com/miekg/dns"
+	"github.com/sethvargo/go-envconfig"
 	gcdns "google.golang.org/api/dns/v1"
 	"google.golang.org/api/option"
 )
 
 type config struct {
-	Domains []string `env:"RENEWED_DOMAINS" envSeparator:" "`
+	Domains []string `env:"RENEWED_DOMAINS, delimiter= "`
 	Cert    string   `env:"RENEWED_LINEAGE"`
 }
 
@@ -196,11 +196,14 @@ func main() {
 
 	var err error
 
+	ctx := context.Background()
+
 	cfg := config{}
-	err = env.Parse(&cfg)
-	if err != nil {
+	if err = envconfig.Process(ctx, &cfg); err != nil {
 		log.Fatal(err)
 	}
+
+	log.Println(cfg)
 
 	domains, err := readCert(cfg.Cert)
 	if err != nil {
