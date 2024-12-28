@@ -34,24 +34,41 @@ import (
 	"google.golang.org/api/option"
 )
 
+// config holds the configuration values for the application, including
+// the domains to be renewed and the path to the renewed certificate.
 type config struct {
 	Domains []string `env:"RENEWED_DOMAINS, delimiter= "`
 	Cert    string   `env:"RENEWED_LINEAGE"`
 }
 
+// tlsa represents the DANE (DNS-based Authentication of Named Entities)
+// information for a certificate, including the trust anchor, end entity,
+// and associated DNS names.
 type tlsa struct {
 	TrustAnchor string
 	EndEntity   string
 	DNSNames    []string
 }
 
-// NewTLSA creates a new instance of tlsa struct.
+// NewTLSA creates a new instance of the tlsa struct with initialized DNSNames slice.
+// It returns a pointer to the newly created tlsa instance.
 func NewTLSA() *tlsa {
 	var t tlsa
 	t.DNSNames = make([]string, 0)
 	return &t
 }
 
+// ReadCert processes an x509.Certificate and populates the tlsa struct with
+// the appropriate DANE (DNS-based Authentication of Named Entities) information.
+// If the certificate is a CA (Certificate Authority), it sets the TrustAnchor field.
+// Otherwise, it sets the EndEntity field and processes the DNS names associated
+// with the certificate, ensuring each DNS name ends with a dot.
+//
+// Parameters:
+//   - c: A pointer to an x509.Certificate to be processed.
+//
+// Returns:
+//   - error: An error if the conversion to DANE fails, otherwise nil.
 func (t *tlsa) ReadCert(c *x509.Certificate) error {
 	if dane, err := dns.CertificateToDANE(1, 1, c); err != nil {
 		return err
@@ -71,6 +88,8 @@ func (t *tlsa) ReadCert(c *x509.Certificate) error {
 	return nil
 }
 
+// MakeRRData generates the resource record data for the TLSA record.
+// It returns a slice of strings containing the TLSA record data.
 func (t tlsa) MakeRRData() []string {
 	r := []string{
 		fmt.Sprintf(
@@ -90,6 +109,9 @@ var (
 	keyPath, zone string
 )
 
+// readCert reads the certificate from the specified file path and returns
+// a tlsa struct populated with the DANE information. It returns an error
+// if the certificate cannot be read or processed.
 func readCert(f string) (*tlsa, error) {
 	t := NewTLSA()
 
@@ -112,8 +134,8 @@ func readCert(f string) (*tlsa, error) {
 	return t, nil
 }
 
-// newDNSClient reads a JSON key file and return a DNS client, the project ID,
-// and any error occurred.
+// newDNSClient reads a JSON key file and returns a DNS client, the project ID,
+// and any error that occurred.
 func newDNSClient(f string) (*gcdns.Service, string, error) {
 	var projectID string
 	var err error
@@ -144,6 +166,8 @@ func newDNSClient(f string) (*gcdns.Service, string, error) {
 	return dnsSer, projectID, nil
 }
 
+// newChange creates a new DNS change set based on the provided resource record sets
+// and the tlsa struct. It returns a pointer to the created gcdns.Change struct.
 func newChange(rR []*gcdns.ResourceRecordSet, t *tlsa) *gcdns.Change {
 	cset := gcdns.Change{}
 
