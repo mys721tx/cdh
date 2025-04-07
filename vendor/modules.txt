@@ -71,8 +71,8 @@ github.com/googleapis/gax-go/v2/callctx
 github.com/googleapis/gax-go/v2/internal
 github.com/googleapis/gax-go/v2/internallog
 github.com/googleapis/gax-go/v2/internallog/internal
-# github.com/miekg/dns v1.1.63
-## explicit; go 1.19
+# github.com/miekg/dns v1.1.65
+## explicit; go 1.22.0
 github.com/miekg/dns
 # github.com/pmezard/go-difflib v1.0.0
 ## explicit
