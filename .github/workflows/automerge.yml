@@ -1,0 +1,65 @@
+name: Dependabot auto-merge
+
+on: pull_request
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  wait-for-checks:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.repository == 'mys721tx/cdh'
+    steps:
+      - name: Wait for Go CI to complete
+        uses: lewagon/wait-on-check-action@v1.4.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          check-name: "build"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 10
+
+  dependabot:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.repository == 'mys721tx/cdh'
+    needs: wait-for-checks
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Update dependencies and vendor directory
+        run: rm -rf go.sum vendor; go mod tidy; go mod vendor
+
+      - name: Commit updated dependencies and vendor directory
+        uses: planetscale/ghcommit-action@v0.2.15
+        with:
+          commit_message: |
+            chore: update dependencies and vendor directory
+
+            This commit updates the dependencies and vendor directory to reflect
+            the latest dependency versions managed by Dependabot.
+          repo: ${{ github.repository }}
+          branch: ${{ github.head_ref || github.ref_name }}
+          empty: true
+          file_pattern: "go.sum vendor/"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Enable auto-merge for Dependabot PRs
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

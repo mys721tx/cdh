@@ -4,20 +4,23 @@ on:
   - push
   - pull_request
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: 'stable'
-        check-latest: true
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+          check-latest: true
 
-    - name: Build
-      run: make
+      - name: Build
+        run: make
 
-    - name: Test
-      run: make test
+      - name: Test
+        run: make test
