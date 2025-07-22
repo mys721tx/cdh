@@ -38,7 +38,7 @@ jobs:
         run: rm -rf go.sum vendor; go mod tidy; go mod vendor
 
       - name: Commit updated dependencies and vendor directory
-        uses: planetscale/ghcommit-action@v0.2.15
+        uses: planetscale/ghcommit-action@v0.2.16
         with:
           commit_message: |
             chore: update dependencies and vendor directory
