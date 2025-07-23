@@ -29,29 +29,6 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      - name: Update dependencies and vendor directory
-        run: rm -rf go.sum vendor; go mod tidy; go mod vendor
-
-      - name: Commit updated dependencies and vendor directory
-        uses: planetscale/ghcommit-action@v0.2.15
-        with:
-          commit_message: |
-            chore: update dependencies and vendor directory
-
-            This commit updates the dependencies and vendor directory to reflect
-            the latest dependency versions managed by Dependabot.
-          repo: ${{ github.repository }}
-          branch: ${{ github.head_ref || github.ref_name }}
-          empty: true
-          file_pattern: "go.sum vendor/"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Dependabot metadata
         id: metadata
         uses: dependabot/fetch-metadata@v2
