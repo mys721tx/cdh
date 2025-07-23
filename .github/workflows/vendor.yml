@@ -11,7 +11,7 @@ permissions:
   pull-requests: write
 
 jobs:
-  generate-types:
+  update-vendor:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
