@@ -33,8 +33,8 @@ uninstall:
 test:
 	gofmt -l *.go
 	@test -z "$$(gofmt -l *.go)" || (echo "Files need to be linted" && false)
-	go vet ${MOD}
-	go test -v ${MOD}
+	go vet ${MOD} ./...
+	go test -v ${MOD} -coverprofile=coverage.txt -covermode=atomic ./...
 
 build:
 	go build -v ${LDFLAGS} -o ${BINNAME} ${MOD}
@@ -50,6 +50,7 @@ package: release
 clean:
 	rm -rf ${PKGNAME}-*
 	rm -f ${BINNAME}
+	rm -f coverage.txt
 
 version:
 	@echo $(VERSION)
