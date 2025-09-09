@@ -6,7 +6,7 @@ require (
 	github.com/miekg/dns v1.1.68
 	github.com/sethvargo/go-envconfig v1.3.0
 	github.com/stretchr/testify v1.11.1
-	google.golang.org/api v0.248.0
+	google.golang.org/api v0.249.0
 )
 
 require (
