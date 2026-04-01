@@ -203,7 +203,7 @@ golang.org/x/tools/internal/stdlib
 golang.org/x/tools/internal/typeparams
 golang.org/x/tools/internal/typesinternal
 golang.org/x/tools/internal/versions
-# google.golang.org/api v0.273.0
+# google.golang.org/api v0.273.1
 ## explicit; go 1.25.0
 google.golang.org/api/dns/v1
 google.golang.org/api/googleapi
