@@ -83,7 +83,7 @@ github.com/miekg/dns
 # github.com/pmezard/go-difflib v1.0.0
 ## explicit
 github.com/pmezard/go-difflib/difflib
-# github.com/sethvargo/go-envconfig v1.3.0
+# github.com/sethvargo/go-envconfig v1.3.1
 ## explicit; go 1.20
 github.com/sethvargo/go-envconfig
 # github.com/stretchr/testify v1.11.1
