@@ -4,7 +4,7 @@ go 1.25.8
 
 require (
 	github.com/miekg/dns v1.1.72
-	github.com/sethvargo/go-envconfig v1.3.1
+	github.com/sethvargo/go-envconfig v1.4.3
 	github.com/stretchr/testify v1.11.1
 	google.golang.org/api v0.289.0
 )
