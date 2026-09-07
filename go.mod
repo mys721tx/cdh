@@ -1,12 +1,12 @@
 module github.com/mys721tx/cdh
 
-go 1.25.8
+go 1.26.0
 
 require (
 	github.com/miekg/dns v1.1.73
 	github.com/sethvargo/go-envconfig v1.4.3
 	github.com/stretchr/testify v1.12.1
-	google.golang.org/api v0.296.0
+	google.golang.org/api v0.297.0
 )
 
 require (
