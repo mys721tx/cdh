@@ -1,5 +1,5 @@
 // CDH: CertBot DANE hook
-// Copyright (C) 2019-2024  Yishen Miao
+// Copyright (C) 2019-2026  Yishen Miao
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -16,13 +16,21 @@
 
 /*
 Cdh takes the domain names and path of the live certificate from certbot and
-update related TLSA records on Google Cloud DNS.
+updates the related TLSA records at a DNS provider. The providers are driven
+through the libdns interfaces (https://github.com/libdns/libdns).
 
 The domain names are passed via the environment variable RENEWED_DOMAINS. The
 path of the certificate is passed via RENEWED_LINEAGE.
 
-Currently Cdh only supports DANE certificate usage 3 (DANE-EE), selector 1 1
-(public key, SHA-256).
+Cdh publishes a DANE-EE record (3 1 1) for the certificate and a DANE-TA record
+(2 1 1) for its issuer, both matching the SHA-256 of the public key. Every
+existing TLSA record set of a domain name in the certificate is updated. If
+there is none, a record set is created at _443._tcp.
+
+The settings of the provider, including its API credentials, are read from
+the JSON configuration file, then from the environment variable CDH_<KEY>,
+where <KEY> is the configuration key in upper case, or from the file named by
+CDH_<KEY>_FILE. Run cdh -h for the variables of each provider.
 
 Usage:
 
@@ -30,9 +38,14 @@ Usage:
 
 The flags are:
 
+	-p string
+		DNS provider (default "googleclouddns")
+	-c string
+		path to the provider JSON configuration file
 	-k string
-		path to the service account JSON key file
+		path to the Google Cloud service account JSON key file
+		(googleclouddns only), the project is taken from it
 	-z string
-		name of the DNS zone
+		DNS zone, e.g. example.com
 */
 package main

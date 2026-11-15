@@ -1,10 +1,17 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
+	"errors"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/libdns/libdns"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewTLSA(t *testing.T) {
@@ -118,6 +125,7 @@ func TestReadCerts(t *testing.T) {
 		})
 	}
 }
+
 func TestMakeRRData(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -125,12 +133,9 @@ func TestMakeRRData(t *testing.T) {
 		expectedRRs []string
 	}{
 		{
-			name: "EmptyTLSA",
-			tlsa: tlsa{},
-			expectedRRs: []string{
-				"3 1 1 ",
-				"2 1 1 ",
-			},
+			name:        "EmptyTLSA",
+			tlsa:        tlsa{},
+			expectedRRs: []string{},
 		},
 		{
 			name: "EndEntityOnly",
@@ -139,7 +144,6 @@ func TestMakeRRData(t *testing.T) {
 			},
 			expectedRRs: []string{
 				"3 1 1 abcdef123456",
-				"2 1 1 ",
 			},
 		},
 		{
@@ -148,7 +152,6 @@ func TestMakeRRData(t *testing.T) {
 				TrustAnchor: "123456abcdef",
 			},
 			expectedRRs: []string{
-				"3 1 1 ",
 				"2 1 1 123456abcdef",
 			},
 		},
@@ -171,4 +174,158 @@ func TestMakeRRData(t *testing.T) {
 			assert.Equal(t, tt.expectedRRs, rrs, "Expected RR data to match")
 		})
 	}
+}
+
+func TestReadCert(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "fullchain.pem"), []byte(certPem+"\n"+caPem+"\n"), 0o600))
+
+	tlsa, err := readCert(dir)
+
+	require.NoError(t, err)
+	assert.NotEmpty(t, tlsa.EndEntity)
+	assert.NotEmpty(t, tlsa.TrustAnchor)
+	assert.Equal(t, []string{"example.com."}, tlsa.DNSNames)
+
+	_, err = readCert(filepath.Join(dir, "missing"))
+	assert.Error(t, err)
+}
+
+func TestNormalizeData(t *testing.T) {
+	assert.Equal(t, "3 1 1 abcdef", normalizeData("3 1 1 ABCDEF"))
+	assert.Equal(t, "3 1 1 abcdef", normalizeData(" 3  1 1 abc def "))
+	assert.Equal(t, "3 1", normalizeData("3 1"))
+}
+
+func tlsaRR(name string, ttl time.Duration, data string) libdns.RR {
+	return libdns.RR{Name: name, TTL: ttl, Type: "TLSA", Data: data}
+}
+
+func TestPlan(t *testing.T) {
+	cert := &tlsa{
+		EndEntity:   "ee",
+		TrustAnchor: "ta",
+		DNSNames:    []string{"example.com.", "www.example.com.", "example.org."},
+	}
+
+	tests := []struct {
+		name     string
+		existing []libdns.Record
+		add      []libdns.Record
+		del      []libdns.Record
+	}{
+		{
+			name: "NoRecords",
+			add: []libdns.Record{
+				tlsaRR("_443._tcp", defaultTTL, "3 1 1 ee"),
+				tlsaRR("_443._tcp", defaultTTL, "2 1 1 ta"),
+				tlsaRR("_443._tcp.www", defaultTTL, "3 1 1 ee"),
+				tlsaRR("_443._tcp.www", defaultTTL, "2 1 1 ta"),
+			},
+		},
+		{
+			name: "UpToDate",
+			existing: []libdns.Record{
+				tlsaRR("_443._tcp", time.Hour, "3 1 1 EE"),
+				tlsaRR("_443._tcp", time.Hour, "2 1 1 ta"),
+				tlsaRR("_443._tcp.www", time.Hour, "3 1 1 ee"),
+				tlsaRR("_443._tcp.www", time.Hour, "2 1 1 ta"),
+			},
+		},
+		{
+			name: "RenewedKeepsNamesAndTTL",
+			existing: []libdns.Record{
+				libdns.RR{Name: "@", TTL: time.Hour, Type: "A", Data: "192.0.2.1"},
+				tlsaRR("_25._tcp", time.Hour, "3 1 1 old"),
+				tlsaRR("_25._tcp", time.Hour, "2 1 1 ta"),
+				tlsaRR("_443._tcp.www", time.Minute, "3 1 1 old"),
+				tlsaRR("_443._tcp.other", time.Minute, "3 1 1 old"),
+			},
+			add: []libdns.Record{
+				tlsaRR("_25._tcp", time.Hour, "3 1 1 ee"),
+				tlsaRR("_443._tcp.www", time.Minute, "3 1 1 ee"),
+				tlsaRR("_443._tcp.www", time.Minute, "2 1 1 ta"),
+			},
+			del: []libdns.Record{
+				tlsaRR("_25._tcp", time.Hour, "3 1 1 old"),
+				tlsaRR("_443._tcp.www", time.Minute, "3 1 1 old"),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			add, del := plan(tt.existing, "example.com", cert)
+
+			assert.Equal(t, tt.add, add)
+			assert.Equal(t, tt.del, del)
+		})
+	}
+}
+
+// fakeProvider is an in-memory libdns provider that records the order of its
+// calls.
+type fakeProvider struct {
+	records []libdns.Record
+	calls   []string
+	err     error
+}
+
+func (f *fakeProvider) GetRecords(_ context.Context, _ string) ([]libdns.Record, error) {
+	f.calls = append(f.calls, "get")
+	return f.records, f.err
+}
+
+func (f *fakeProvider) AppendRecords(_ context.Context, _ string, recs []libdns.Record) ([]libdns.Record, error) {
+	f.calls = append(f.calls, "append")
+	f.records = append(f.records, recs...)
+	return recs, nil
+}
+
+func (f *fakeProvider) DeleteRecords(_ context.Context, _ string, recs []libdns.Record) ([]libdns.Record, error) {
+	f.calls = append(f.calls, "delete")
+	var kept []libdns.Record
+	for _, r := range f.records {
+		found := false
+		for _, d := range recs {
+			found = found || r.RR() == d.RR()
+		}
+		if !found {
+			kept = append(kept, r)
+		}
+	}
+	f.records = kept
+	return recs, nil
+}
+
+func TestUpdate(t *testing.T) {
+	cert := &tlsa{EndEntity: "ee", TrustAnchor: "ta", DNSNames: []string{"example.com."}}
+	p := &fakeProvider{records: []libdns.Record{
+		tlsaRR("_443._tcp", time.Hour, "3 1 1 old"),
+		tlsaRR("_443._tcp", time.Hour, "2 1 1 ta"),
+	}}
+
+	added, deleted, err := update(context.Background(), p, "example.com", cert)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, added)
+	assert.Equal(t, 1, deleted)
+	assert.Equal(t, []string{"get", "append", "delete"}, p.calls, "records are appended before stale ones are deleted")
+	assert.ElementsMatch(t, []libdns.Record{
+		tlsaRR("_443._tcp", time.Hour, "2 1 1 ta"),
+		tlsaRR("_443._tcp", time.Hour, "3 1 1 ee"),
+	}, p.records)
+
+	// A second run is a no-op.
+	p.calls = nil
+	added, deleted, err = update(context.Background(), p, "example.com.", cert)
+
+	require.NoError(t, err)
+	assert.Zero(t, added)
+	assert.Zero(t, deleted)
+	assert.Equal(t, []string{"get"}, p.calls)
+
+	p.err = errors.New("boom")
+	_, _, err = update(context.Background(), p, "example.com.", cert)
+	assert.Error(t, err)
 }

@@ -1,5 +1,5 @@
 // CDH: CertBot DANE hook
-// Copyright (C) 2019-2024  Yishen Miao
+// Copyright (C) 2019-2026  Yishen Miao
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -19,19 +19,30 @@ package main
 import (
 	"context"
 	"crypto/x509"
-	"encoding/json"
 	"encoding/pem"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 
+	"github.com/libdns/libdns"
 	"github.com/miekg/dns"
 	"github.com/sethvargo/go-envconfig"
-	gcdns "google.golang.org/api/dns/v1"
-	"google.golang.org/api/option"
+)
+
+const (
+	// recordType is the DNS record type managed by cdh.
+	recordType = "TLSA"
+	// defaultPrefix is prepended to a domain name that has no TLSA records
+	// yet.
+	defaultPrefix = "_443._tcp."
+	// defaultTTL is the TTL of newly created TLSA record sets. Existing
+	// record sets keep their TTL.
+	defaultTTL = 300 * time.Second
 )
 
 // config holds the configuration values for the application, including
@@ -88,26 +99,22 @@ func (t *tlsa) ReadCert(c *x509.Certificate) error {
 	return nil
 }
 
-// MakeRRData generates the resource record data for the TLSA record.
-// It returns a slice of strings containing the TLSA record data.
+// MakeRRData generates the resource record data for the TLSA records: a
+// DANE-EE record for the end entity certificate and a DANE-TA record for the
+// trust anchor. A record is omitted when the corresponding certificate is
+// missing.
 func (t tlsa) MakeRRData() []string {
-	r := []string{
-		fmt.Sprintf(
-			"3 1 1 %s",
-			t.EndEntity,
-		),
-		fmt.Sprintf(
-			"2 1 1 %s",
-			t.TrustAnchor,
-		),
+	r := make([]string, 0, 2)
+
+	if t.EndEntity != "" {
+		r = append(r, fmt.Sprintf("3 1 1 %s", t.EndEntity))
+	}
+	if t.TrustAnchor != "" {
+		r = append(r, fmt.Sprintf("2 1 1 %s", t.TrustAnchor))
 	}
 
 	return r
 }
-
-var (
-	keyPath, zone string
-)
 
 // readCert reads the certificate from the specified file path and returns
 // a tlsa struct populated with the DANE information. It returns an error
@@ -134,96 +141,182 @@ func readCert(f string) (*tlsa, error) {
 	return t, nil
 }
 
-// newDNSClient reads a JSON key file and returns a DNS client, the project ID,
-// and any error that occurred.
-func newDNSClient(f string) (*gcdns.Service, string, error) {
-	var projectID string
-	var err error
-
-	data, err := os.ReadFile(filepath.Clean(f))
-	if err != nil {
-		return nil, projectID, err
+// normalizeData returns the canonical form of TLSA record data so that
+// records returned by different providers can be compared: fields are
+// separated by a single space and the certificate association data is
+// lowercase without embedded whitespace.
+func normalizeData(d string) string {
+	f := strings.Fields(strings.ToLower(d))
+	if len(f) <= 3 {
+		return strings.Join(f, " ")
 	}
-
-	var info map[string]string
-	err = json.Unmarshal(data, &info)
-	if err != nil {
-		return nil, projectID, err
-	}
-	if p, ok := info["project_id"]; ok {
-		projectID = p
-	}
-
-	dnsSer, err := gcdns.NewService(
-		context.Background(),
-		option.WithCredentialsJSON(data),
-		option.WithScopes(gcdns.NdevClouddnsReadwriteScope),
-	)
-	if err != nil {
-		return nil, projectID, err
-	}
-
-	return dnsSer, projectID, nil
+	return strings.Join(f[:3], " ") + " " + strings.Join(f[3:], "")
 }
 
-// newChange creates a new DNS change set based on the provided resource record sets
-// and the tlsa struct. It returns a pointer to the created gcdns.Change struct.
-func newChange(rR []*gcdns.ResourceRecordSet, t *tlsa) *gcdns.Change {
-	cset := gcdns.Change{}
+// fqdn returns the name in lowercase with a trailing dot.
+func fqdn(name string) string {
+	name = strings.ToLower(name)
+	if !strings.HasSuffix(name, ".") {
+		name += "."
+	}
+	return name
+}
 
-	// Build a map of resource record sets
-	recordMap := make(map[string][]*gcdns.ResourceRecordSet)
-	for _, r := range rR {
-		if r.Type == "TLSA" {
-			domain := strings.SplitN(r.Name, ".", 3)[2] // Remove the TLSA prefix from the domain name
-			recordMap[domain] = append(recordMap[domain], r)
+// inZone reports whether the fully qualified name is at or below the zone.
+func inZone(name, zone string) bool {
+	return name == zone || strings.HasSuffix(name, "."+zone)
+}
+
+// plan compares the TLSA records in the zone against the certificate and
+// returns the records to append and the records to delete.
+//
+// For each DNS name in the certificate, every TLSA record set attached to that
+// name (_port._proto.name) is brought in line with the certificate while its
+// TTL is preserved. If the name has no TLSA record set, one is created for
+// port 443 over TCP. DNS names outside of the zone are skipped.
+func plan(existing []libdns.Record, zone string, t *tlsa) (add, del []libdns.Record) {
+	zone = fqdn(zone)
+	want := t.MakeRRData()
+
+	// TLSA records in the zone, grouped by the domain name they are
+	// attached to and then by their own name.
+	sets := make(map[string]map[string][]libdns.Record)
+	for _, r := range existing {
+		rr := r.RR()
+		if !strings.EqualFold(rr.Type, recordType) {
+			continue
 		}
+		name := fqdn(libdns.AbsoluteName(rr.Name, zone))
+		labels := strings.SplitN(name, ".", 3)
+		if len(labels) < 3 || labels[2] == "" {
+			continue
+		}
+		if sets[labels[2]] == nil {
+			sets[labels[2]] = make(map[string][]libdns.Record)
+		}
+		sets[labels[2]][name] = append(sets[labels[2]][name], r)
 	}
 
-	for _, dnsName := range t.DNSNames {
-		// Check if the DNS name exists in the map
-		if rList, ok := recordMap[dnsName]; ok {
-			for _, r := range rList {
-				// Append the original record to cset.Deletions
-				cset.Deletions = append(cset.Deletions, r)
+	seen := make(map[string]bool)
+	for _, d := range t.DNSNames {
+		d = fqdn(d)
+		if seen[d] {
+			continue
+		}
+		seen[d] = true
 
-				// Create a new resource record set with updated Rrdatas
-				newRecord := &gcdns.ResourceRecordSet{
-					Kind:    r.Kind,
-					Name:    r.Name,
-					Ttl:     r.Ttl,
-					Type:    r.Type,
-					Rrdatas: t.MakeRRData(),
+		if !inZone(d, zone) {
+			log.Printf("skipping %s: not in zone %s", d, zone)
+			continue
+		}
+
+		names := make([]string, 0, len(sets[d]))
+		for n := range sets[d] {
+			names = append(names, n)
+		}
+		sort.Strings(names)
+		if len(names) == 0 {
+			names = append(names, defaultPrefix+d)
+		}
+
+		for _, n := range names {
+			ttl := defaultTTL
+			have := make(map[string]bool)
+			for i, r := range sets[d][n] {
+				if i == 0 {
+					ttl = r.RR().TTL
 				}
-				cset.Additions = append(cset.Additions, newRecord)
+				have[normalizeData(r.RR().Data)] = true
 			}
-		} else {
-			// Create a new resource record set with default values
-			newRecord := &gcdns.ResourceRecordSet{
-				Kind:    "dns#resourceRecordSet",
-				Name:    "_443._tcp." + dnsName,
-				Ttl:     300,
-				Type:    "TLSA",
-				Rrdatas: t.MakeRRData(),
+
+			keep := make(map[string]bool)
+			for _, w := range want {
+				keep[normalizeData(w)] = true
+				if !have[normalizeData(w)] {
+					add = append(add, libdns.RR{
+						Name: libdns.RelativeName(n, zone),
+						TTL:  ttl,
+						Type: recordType,
+						Data: w,
+					})
+				}
 			}
-			cset.Additions = append(cset.Additions, newRecord)
+			for _, r := range sets[d][n] {
+				if !keep[normalizeData(r.RR().Data)] {
+					del = append(del, r)
+				}
+			}
 		}
 	}
 
-	return &cset
+	return add, del
+}
+
+// update brings the TLSA records of the zone in line with the certificate. New
+// records are appended before stale records are deleted so that a valid TLSA
+// record is published at all times. It returns the number of records appended
+// and deleted.
+func update(ctx context.Context, p provider, zone string, t *tlsa) (int, int, error) {
+	zone = fqdn(zone)
+
+	existing, err := p.GetRecords(ctx, zone)
+	if err != nil {
+		return 0, 0, fmt.Errorf("listing records: %w", err)
+	}
+
+	add, del := plan(existing, zone, t)
+
+	if len(add) > 0 {
+		if _, err := p.AppendRecords(ctx, zone, add); err != nil {
+			return 0, 0, fmt.Errorf("appending records: %w", err)
+		}
+	}
+	if len(del) > 0 {
+		if _, err := p.DeleteRecords(ctx, zone, del); err != nil {
+			return len(add), 0, fmt.Errorf("deleting records: %w", err)
+		}
+	}
+
+	return len(add), len(del), nil
+}
+
+// usage prints the flags and the environment variables holding the settings of
+// each provider.
+func usage() {
+	w := flag.CommandLine.Output()
+
+	fmt.Fprintf(w, "Usage of %s:\n", os.Args[0])
+	flag.PrintDefaults()
+	fmt.Fprintf(w, "\nProvider settings are read from the configuration file (-c) and from the\n"+
+		"environment. Append %s to a variable to read its value from a file.\n\n", envFileSuffix)
+	for _, n := range providerNames() {
+		fmt.Fprintf(w, "  %s:\n    \t%s\n", n, strings.Join(envNames(providers[n]()), ", "))
+	}
 }
 
 func main() {
-	flag.StringVar(&keyPath, "k", "", "path to the Google Cloud key file")
-	flag.StringVar(&zone, "z", "", "name of the DNS zone")
+	var name, cfgPath, keyPath, zone string
+
+	flag.StringVar(&name, "p", defaultProvider, "DNS provider, one of: "+strings.Join(providerNames(), ", "))
+	flag.StringVar(&cfgPath, "c", "", "path to the provider JSON configuration file")
+	flag.StringVar(&keyPath, "k", "", "path to the Google Cloud key file (googleclouddns only)")
+	flag.StringVar(&zone, "z", "", "DNS zone, e.g. example.com")
+	flag.Usage = usage
 	flag.Parse()
 
-	var err error
+	if zone == "" {
+		log.Fatal("the DNS zone (-z) is required")
+	}
+
+	p, err := newProvider(name, cfgPath, keyPath)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	ctx := context.Background()
 
 	cfg := config{}
-	if err = envconfig.Process(ctx, &cfg); err != nil {
+	if err := envconfig.Process(ctx, &cfg); err != nil {
 		log.Fatal(err)
 	}
 
@@ -234,22 +327,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	dnsService, project, err := newDNSClient(keyPath)
+	added, deleted, err := update(ctx, p, zone, domains)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	records, err := dnsService.ResourceRecordSets.List(project, zone).Do()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	cset := newChange(records.Rrsets, domains)
-
-	change, err := dnsService.Changes.Create(project, zone, cset).Do()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Println(change.Status)
+	fmt.Printf("%d records added, %d records deleted\n", added, deleted)
 }
